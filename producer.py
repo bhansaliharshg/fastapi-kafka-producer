@@ -26,26 +26,28 @@ app.add_middleware(
 
 @app.get('/tweet')
 async def getTweets(query: str = '', limit: int = 10):
-    if not query.startswith('#'):
-        query = '#' + query
-    print(query, limit)
-    api = setup()
-    producer = KafkaProducer(bootstrap_servers=['localhost:9092'],
+    try:
+        if not query.startswith('#'):
+            query = '#' + query
+        print(query, limit)
+        details = []
+        api = setup()
+        producer = KafkaProducer(bootstrap_servers=['localhost:9092'],
                          value_serializer=lambda x: 
                          json.dumps(x).encode('utf-8'))
-    producer.send('tweet_stream', {'search_trigger': query})
-    tweets = api.search_tweets(q=query, count=limit)
-    for tweet in tweets:
-        if tweet.lang == 'en':
-            location = {}
-            user = {'username' : tweet.user.screen_name}
-            #print('Location: ', tweet.geo)
-            if tweet.geo:
-                print(tweet.geo)
+        producer.send('tweet_stream', {'search_trigger': query})
+        tweets = api.search_tweets(q=query, count=limit)
+        for tweet in tweets:
+            if tweet.lang == 'en':
                 location = {}
-            if tweet.user:
-                user = {'id': tweet.user.id,'username': tweet.user.screen_name, 'display_name': tweet.user.name, 'description': tweet.user.description, 'followers': tweet.user.followers_count, 'friends': tweet.user.friends_count, 'verified': tweet.user.verified}
-            data = {'date': tweet.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+                user = {'username' : tweet.user.screen_name}
+                #print('Location: ', tweet.geo)
+                if tweet.geo:
+                    print(tweet.geo)
+                    location = {}
+                if tweet.user:
+                    user = {'id': tweet.user.id,'username': tweet.user.screen_name, 'display_name': tweet.user.name, 'description': tweet.user.description, 'followers': tweet.user.followers_count, 'friends': tweet.user.friends_count, 'verified': tweet.user.verified}
+                data = {'date': tweet.created_at.strftime("%Y-%m-%d %H:%M:%S"),
                     'user': user,
                     'tweet': tweet._json['text'],
                     'clean_tweet': cleanText(tweet._json['text']),
@@ -54,10 +56,13 @@ async def getTweets(query: str = '', limit: int = 10):
                     'source': tweet.source,
                     'favourite_count': tweet.favorite_count,
                     'retweet_count': tweet.retweet_count}
-            print('Sending..', data)
-            producer.send('tweet_stream', data)
-            sleep(1)
-    return 'Data Sent to Pipeline by Producer'
+                print('Sending..', data)
+                details.append(data)
+                producer.send('tweet_stream', data)
+        producer.send('tweet_stream', {'search_end': True})
+        return details
+    except Exception as e:
+        return {'error': 'Error Occurred'}
 
 def cleanText(text):
     if text:   
@@ -72,10 +77,10 @@ def setup():
     config = configparser.ConfigParser()
     path = os.getcwd()+'/producer/config.ini'
     config.read(path)
-    api_key = config['twitter']['api_key']
-    api_key_secret = config['twitter']['api_key_secret']
-    access_token = config['twitter']['access_token']
-    access_token_secret = config['twitter']['access_token_secret']
+    api_key = 'wGFVc10RxV25r6e0GyiOlEFhZ'
+    api_key_secret = 'OrDYeR73ysF13efMlg4cGLytVCdUjXslEauA8CbYP3neW3UhPz'
+    access_token = '2930806308-kXY6XzquZC6MZsew4RykzyBmQGWL4HaC8IL9UAc'
+    access_token_secret = 'XpDR5tvcddX2FLlle1Nse3SXDnAauIWTDHacndKjbeZwq'
     auth = tweepy.OAuthHandler(api_key, api_key_secret)
     auth.set_access_token(access_token, access_token_secret)
     return tweepy.API(auth)
